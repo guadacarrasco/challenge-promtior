@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "promtior-rag"
+version = "0.1.0"
+description = "RAG chatbot for Promtior using LangChain and Ollama"
+requires-python = ">=3.10"
+authors = [
+    {name = "Promtior Team", email = "team@promtior.ai"},
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.10",
+    "langserve>=0.0.28",
+    "chromadb>=0.4.0",
+    "ollama>=0.1.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "pypdf>=3.17.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "sentence-transformers>=2.2.0",
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
