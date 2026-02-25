@@ -1,0 +1,311 @@
+# System Architecture
+
+## High-Level Component Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         USER INTERACTION                            │
+└─────────────────────┬───────────────────────────────────────────────┘
+                      │
+                      │ HTTP Request
+                      ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    FRONTEND LAYER (Port 3000)                       │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ React/Next.js Chat UI                                       │  │
+│  │ - Header Component      (connection status)                 │  │
+│  │ - ChatBox Component     (message history)                   │  │
+│  │ - InputBar Component    (user input)                        │  │
+│  │                                                              │  │
+│  │ Styling: Tailwind CSS + Custom Animations                  │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                      │                                              │
+│                      │ Axios HTTP POST /api/chat                   │
+│                      ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ API Client (lib/api.ts)                                     │  │
+│  │ - sendMessage(query: string)                                │  │
+│  │ - checkHealth()                                             │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────────────────────────┘
+                      │
+                      │ JSON Request: { message: string }
+                      ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     BACKEND API LAYER (Port 8000)                   │
+│  FastAPI + LangServe + CORS Middleware                             │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ API Endpoints                                               │  │
+│  │ - POST /api/chat        (main chat endpoint)               │  │
+│  │ - GET /api/health       (health check)                     │  │
+│  │ - POST /api/init        (dev: reinit vector store)         │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                      │                                              │
+│                      │ Invoke RAG Chain
+│                      ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ RAG CHAIN (rag/chain.py)                                    │  │
+│  │                                                              │  │
+│  │  ┌─────────────────────────────────────────────────────┐   │  │
+│  │  │ 1. RETRIEVAL PHASE                                │   │  │
+│  │  │                                                     │   │  │
+│  │  │ Query: "What services does Promtior offer?"      │   │  │
+│  │  │         ↓                                          │   │  │
+│  │  │    [Retriever] (rag/retriever.py)                │   │  │
+│  │  │         ↓                                          │   │  │
+│  │  │    Embed query using sentence-transformers       │   │  │
+│  │  │         ↓                                          │   │  │
+│  │  │    [Vector Store Search] (vector_store/store.py)│   │  │
+│  │  │         ↓                                          │   │  │
+│  │  │    Retrieved: Top-3 Similar Documents            │   │  │
+│  │  │    Example: "Promtior offers AI solutions"       │   │  │
+│  │  │             "Enterprise AI services"              │   │  │
+│  │  │             "ML and NLP capabilities"             │   │  │
+│  │  │                                                     │   │  │
+│  │  └─────────────────────────────────────────────────────┘   │  │
+│  │                                                              │  │
+│  │  ┌─────────────────────────────────────────────────────┐   │  │
+│  │  │ 2. CONTEXT FORMATTING PHASE                        │   │  │
+│  │  │                                                     │   │  │
+│  │  │ Format retrieved docs into context string:         │   │  │
+│  │  │ "[1] (source): doc1_content                        │   │  │
+│  │  │  [2] (source): doc2_content                        │   │  │
+│  │  │  [3] (source): doc3_content"                       │   │  │
+│  │  │                                                     │   │  │
+│  │  └─────────────────────────────────────────────────────┘   │  │
+│  │                                                              │  │
+│  │  ┌─────────────────────────────────────────────────────┐   │  │
+│  │  │ 3. GENERATION PHASE                                │   │  │
+│  │  │                                                     │   │  │
+│  │  │ Combined Prompt:                                    │   │  │
+│  │  │ "Context: [retrieved docs]                         │   │  │
+│  │  │  Question: What services does Promtior offer?     │   │  │
+│  │  │  Answer: "                                         │   │  │
+│  │  │         ↓                                           │   │  │
+│  │  │    [Ollama LLM] (rag/llm.py)                       │   │  │
+│  │  │    Model: LLaMA2                                    │   │  │
+│  │  │         ↓                                           │   │  │
+│  │  │    Generated Answer:                                │   │  │
+│  │  │    "Promtior offers enterprise AI services        │   │  │
+│  │  │     including machine learning, NLP, and          │   │  │
+│  │  │     computer vision capabilities..."              │   │  │
+│  │  │                                                     │   │  │
+│  │  └─────────────────────────────────────────────────────┘   │  │
+│  │                                                              │  │
+│  │  ┌─────────────────────────────────────────────────────┐   │  │
+│  │  │ 4. RESPONSE FORMATTING                             │   │  │
+│  │  │                                                     │   │  │
+│  │  │ Return JSON:                                        │   │  │
+│  │  │ {                                                   │   │  │
+│  │  │   "response": "Promtior offers...",               │   │  │
+│  │  │   "sources": [                                      │   │  │
+│  │  │     {"content": "...", "metadata": {...}},        │   │  │
+│  │  │     {"content": "...", "metadata": {...}},        │   │  │
+│  │  │     {"content": "...", "metadata": {...}}         │   │  │
+│  │  │   ]                                                 │   │  │
+│  │  │ }                                                   │   │  │
+│  │  │                                                     │   │  │
+│  │  └─────────────────────────────────────────────────────┘   │  │
+│  │                                                              │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────────────────────────────┘
+                      │
+                      │ JSON Response with sources
+                      ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    FRONTEND LAYER (Display)                         │
+│  Display response in ChatBox with:                                  │
+│  - Bot message bubble                                               │
+│  - Expandable source citations                                      │
+│  - Source metadata (url, document type, page)                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Data Infrastructure
+
+```
+┌──────────────────────────────────────────────────────┐
+│              DATA INGESTION LAYER                    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Source 1: Website (promtior.ai)            │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ WebBaseLoader (LangChain)              ││   │
+│  │ │ • Fetch HTML from https://promtior.ai ││   │
+│  │ │ • Extract text content                 ││   │
+│  │ │ • Add metadata: {source: url, type: website} ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                        │                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Source 2: PDF Files (Optional)             │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ PyPDFLoader (LangChain)                ││   │
+│  │ │ • Load PDF presentations               ││   │
+│  │ │ • Extract text per page                ││   │
+│  │ │ • Add metadata: {source: filename, page: N} ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                        │                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Text Chunking (chunker.py)                 │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ RecursiveCharacterTextSplitter          ││   │
+│  │ │ • Chunk size: 1000 characters           ││   │
+│  │ │ • Overlap: 200 characters               ││   │
+│  │ │ • Separators: \n\n, \n, space, char    ││   │
+│  │ │ • Preserve metadata in each chunk       ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                        │                            │
+└────────────────────────┼────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────┐
+│           EMBEDDING & STORAGE LAYER                 │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Embedding Model (embedder.py)              │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ SentenceTransformer                     ││   │
+│  │ │ • Model: all-MiniLM-L6-v2               ││   │
+│  │ │ • Output: 384D embeddings               ││   │
+│  │ │ • Speed: ~1000 sentences/sec            ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                        │                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Vector Store (store.py)                    │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ ChromaDB                                ││   │
+│  │ │ • Backend: DuckDB + Parquet             ││   │
+│  │ │ • Collection: "promtior_docs"           ││   │
+│  │ │ • Distance: Cosine Similarity           ││   │
+│  │ │ • Persistence: ./chroma_data/           ││   │
+│  │ │ • Stores: [id, embedding, text, meta]  ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                        │                            │
+└────────────────────────┼────────────────────────────┘
+                         │
+                         ▼
+            [Vector Store on Disk]
+         (~100MB for typical dataset)
+```
+
+## LLM Service
+
+```
+┌──────────────────────────────────────────────────────┐
+│              LLM SERVICE LAYER (Port 11434)          │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Ollama Container                           │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ LLaMA2 Model                           ││   │
+│  │ │ • Quantized version (7B parameters)    ││   │
+│  │ │ • Binary size: ~3.5 GB                 ││   │
+│  │ │ • Temperature: 0.7 (balanced)          ││   │
+│  │ │ • Top-p: 0.9 (nucleus sampling)        ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│         ▲                                   ▼      │
+│         │                                          │
+│    Python                            Inference    │
+│    langchain.llms.Ollama                      │      │
+│                                                   │
+└──────────────────────────────────────────────────────┘
+```
+
+## Deployment Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│              RAILWAY DEPLOYMENT                      │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ Railway Container                          │   │
+│  │ ┌─────────────────────────────────────────┐│   │
+│  │ │ Multi-stage Docker Build                ││   │
+│  │ │                                          ││   │
+│  │ │ Stage 1: Frontend Builder (node:18)    ││   │
+│  │ │ • npm ci && npm build                   ││   │
+│  │ │ • Output: .next/ + public/              ││   │
+│  │ │                                          ││   │
+│  │ │ Stage 2: Backend Runtime (python:3.10) ││   │
+│  │ │ • pip install -e .                      ││   │
+│  │ │ • Copy backend src/                     ││   │
+│  │ │ • Copy frontend .next/                  ││   │
+│  │ │ • CMD: uvicorn src.api.app:app          ││   │
+│  │ │                                          ││   │
+│  │ └─────────────────────────────────────────┘│   │
+│  └─────────────────────────────────────────────┘   │
+│                                                      │
+│  Port 8000: FastAPI + Next.js static files         │
+│  Port 11434: Ollama (if co-located)                │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+## Sequence Diagram: Complete Chat Flow
+
+```
+User          Frontend        API          RAG         LLM
+ │               │            │           Chain        │
+ │               │            │            │           │
+ │ "What does"   │            │            │           │
+ │ "Promtior"    │            │            │           │
+ │ "offer?"      │            │            │           │
+ ├──────────────>│            │            │           │
+ │               │ POST /api/chat{message}│           │
+ │               ├───────────>│            │           │
+ │               │            │ invoke()   │           │
+ │               │            ├──────────>│           │
+ │               │            │           │ retrieve()│
+ │               │            │           ├─────────>│
+ │               │            │           │ [top 3]   │
+ │               │            │           │<─────────┤
+ │               │            │           │           │
+ │               │            │           │ format_context()
+ │               │            │           │           │
+ │               │            │           │ generate_prompt()
+ │               │            │           │           │
+ │               │            │           │ invoke(prompt)
+ │               │            │           ├──────────>│
+ │               │            │           │ "Promtior │
+ │               │            │           │  offers..."│
+ │               │            │           │<──────────┤
+ │               │            │<──────────┤           │
+ │               │{response, sources}     │           │
+ │               │<───────────            │           │
+ │<──────────────┤                        │           │
+ │ Answer +      │                        │           │
+ │ Citations     │                        │           │
+ │               │                        │           │
+```
+
+## Database Schema
+
+```
+ChromaDB Collection: "promtior_docs"
+├── id: "doc_0", "doc_1", ...
+├── embedding: [384-dimensional vector]
+├── document: "chunk text content"
+└── metadata:
+    ├── source: "https://promtior.ai" | "filename.pdf"
+    ├── type: "website" | "pdf"
+    ├── page: 1  (for PDFs)
+    └── chunk_id: 0
+```
+
+## Performance Notes
+
+- **Embedding**: ~100ms per document chunk
+- **Retrieval**: ~50-100ms for top-3 search
+- **LLM Generation**: 2-10 seconds (depends on model and hardware)
+- **Total E2E**: 3-15 seconds per chat query
+
