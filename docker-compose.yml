@@ -9,12 +9,6 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   backend:
     build:
@@ -32,8 +26,7 @@ services:
       - ./backend:/app/backend
       - backend_data:/app/chroma_data
     depends_on:
-      ollama:
-        condition: service_healthy
+      - ollama
     command: >
       bash -c "
         echo 'Waiting for Ollama to be ready...' &&

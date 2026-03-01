@@ -5,7 +5,7 @@ import os
 from typing import Optional
 
 try:
-    from langchain.llms import Ollama
+    from langchain_community.llms import Ollama
 except ImportError:
     raise ImportError("Please install langchain and langchain-community")
 

@@ -30,17 +30,6 @@ echo ""
 AVAILABLE_SPACE=$(df /Users/guadalupe.carrascoibm.com | tail -1 | awk '{print $4}')
 REQUIRED_SPACE=$((10 * 1024 * 1024))  # 10GB in KB
 
-if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
-    echo "⚠️  Warning: Less than 10GB available disk space"
-    echo "   Ollama model (~3.5GB) and vector store (~1GB) will be downloaded"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
-
-# Stop existing containers if running
 if docker-compose ps 2>/dev/null | grep -q "Up"; then
     echo "🛑 Stopping existing containers..."
     docker-compose down

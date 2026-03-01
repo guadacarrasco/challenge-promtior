@@ -4,12 +4,12 @@
 FROM node:18-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install
 COPY frontend/ .
 RUN npm run build
 
 # Stage 2: Backend & runner
-FROM python:3.10-slim
+FROM python:3.10 AS backend
 WORKDIR /app
 
 # Install system dependencies

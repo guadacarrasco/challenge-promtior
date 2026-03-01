@@ -56,7 +56,7 @@ def init_vector_store(
     added = vector_store.add_documents(chunked_docs)
     
     # Persist
-    vector_store.persist()
+    # Vector store auto-persists with PersistentClient
     
     # Print stats
     stats = vector_store.get_stats()

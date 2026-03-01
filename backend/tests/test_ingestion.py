@@ -1,7 +1,7 @@
 """Tests for data ingestion"""
 
 from src.data_ingestion.chunker import chunk_documents
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 
 class TestChunker:

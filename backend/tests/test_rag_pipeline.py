@@ -2,7 +2,7 @@
 
 import tempfile
 import shutil
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.vector_store.store import VectorStore
 from src.rag.retriever import Retriever

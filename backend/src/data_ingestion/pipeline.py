@@ -2,7 +2,7 @@
 
 import logging
 from typing import List
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from .web_scraper import scrape_website, scrape_multiple_urls
 from .pdf_loader import load_pdf, load_pdfs_from_directory

@@ -6,11 +6,10 @@ from pathlib import Path
 
 try:
     import chromadb
-    from chromadb.config import Settings
 except ImportError:
     raise ImportError("Please install chromadb: pip install chromadb")
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from .embedder import EmbeddingModel
 
 logger = logging.getLogger(__name__)
@@ -44,14 +43,8 @@ class VectorStore:
         
         logger.info(f"Initializing ChromaDB at {persist_dir}")
         
-        # Initialize ChromaDB client with persistence
-        self.client = chromadb.Client(
-            Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory=persist_dir,
-                anonymized_telemetry=False,
-            )
-        )
+        # Initialize ChromaDB client with persistence (new API)
+        self.client = chromadb.PersistentClient(path=persist_dir)
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
@@ -147,8 +140,3 @@ class VectorStore:
             'document_count': count,
             'embedding_dimension': self.embedding_model.get_dimension(),
         }
-    
-    def persist(self):
-        """Persist the vector store to disk"""
-        logger.info("Persisting vector store")
-        self.client.persist()

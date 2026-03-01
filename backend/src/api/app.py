@@ -69,8 +69,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down application...")
-    if vector_store:
-        vector_store.persist()
+    # Vector store auto-persists with PersistentClient
     logger.info("Application shutdown complete")
 
 
@@ -193,7 +192,7 @@ async def init_vector_store_endpoint():
         # Clear and re-populate vector store
         vector_store.clear()
         added = vector_store.add_documents(chunked_docs)
-        vector_store.persist()
+        # Vector store auto-persists with PersistentClient
         
         stats = vector_store.get_stats()
         logger.info(f"Vector store re-initialized: {added} documents added")
