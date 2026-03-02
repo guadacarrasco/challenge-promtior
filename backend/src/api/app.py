@@ -4,12 +4,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from langchain_core.runnables import Runnable
 from langserve import add_routes
@@ -197,35 +194,6 @@ async def health_check():
         "status": "ok",
         "vector_store": stats,
     }
-
-
-# Serve static files from Next.js build
-frontend_static = Path(__file__).parent.parent.parent / "frontend" / ".next" / "static"
-if frontend_static.exists():
-    app.mount("/_next/static", StaticFiles(directory=frontend_static), name="static")
-    logger.info(f"Mounted static files from {frontend_static}")
-
-frontend_public = Path(__file__).parent.parent.parent / "frontend" / "public"
-if frontend_public.exists():
-    app.mount("/public", StaticFiles(directory=frontend_public), name="public")
-    logger.info(f"Mounted public files from {frontend_public}")
-
-
-# Catch-all route to serve Next.js frontend for client-side routing
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    """Serve Next.js frontend for all non-API routes"""
-    # Don't intercept API routes or LangServe routes
-    if any(full_path.startswith(prefix) for prefix in ["api/", "chain", "_next", "public"]):
-        return None
-    
-    # Return index.html for client-side routing
-    index_file = Path(__file__).parent.parent.parent / "frontend" / ".next" / "standalone" / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    
-    # Fallback if file not found
-    return {"error": "Frontend not found"}
 
 
 # Initialize vector store endpoint (for development)
