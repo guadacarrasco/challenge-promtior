@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { ChatBox } from '@/components/ChatBox';
 import { InputBar } from '@/components/InputBar';
-import { sendMessage, checkHealth } from '@/lib/api';
+import { sendMessage, checkHealth, streamMessage } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -42,21 +42,55 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    // Create an assistant message that will be updated as chunks arrive
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      sources: [],
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, assistantMessage]);
+
     try {
-      const response = await sendMessage(message);
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.response || response.error || 'No response received',
-        sources: response.sources,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+      await streamMessage(
+        message,
+        // onChunk: update the assistant message content
+        (chunk: string) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content + chunk }
+                : msg
+            )
+          );
+        },
+        // onSources: update the assistant message sources
+        (sources: any[]) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, sources }
+                : msg
+            )
+          );
+        },
+        // onError: show error message
+        (error: string) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: `Error: ${error}` }
+                : msg
+            )
+          );
+        }
+      );
     } catch (error) {
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 2).toString(),
         role: 'assistant',
         content: 'Sorry, an error occurred. Please try again.',
         timestamp: new Date(),

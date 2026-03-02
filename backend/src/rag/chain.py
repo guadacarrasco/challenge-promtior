@@ -92,3 +92,71 @@ class RAGChain:
             'answer': answer,
             'sources': sources,
         }
+    
+    def stream(self, query: str):
+        """
+        Stream the RAG pipeline with streaming answer generation.
+        
+        Args:
+            query: User query
+            
+        Yields:
+            Dictionary chunks with incrementally built answer and sources
+        """
+        logger.info(f"RAG Chain streaming with query: {query}")
+        
+        # Retrieve relevant documents (non-streaming)
+        retrieved_docs = self.retriever.retrieve(query)
+        
+        # Extract source information
+        sources = [
+            {
+                'content': doc['content'][:200],
+                'metadata': doc['metadata'],
+            }
+            for doc in retrieved_docs
+        ]
+        
+        # Format context
+        context = self.retriever.format_context(retrieved_docs)
+        
+        # Generate prompt
+        prompt = QUESTION_TEMPLATE.format(
+            context=context,
+            question=query,
+        )
+        
+        logger.debug(f"Generated prompt for streaming: {prompt[:200]}...")
+        
+        # Yield sources first
+        logger.info(f"Yielding {len(sources)} sources")
+        yield {
+            'type': 'sources',
+            'sources': sources,
+        }
+        
+        # Stream the answer
+        try:
+            answer_length = 0
+            chunk_count = 0
+            logger.info("Starting LLM stream generation")
+            
+            for chunk in self.llm.stream(prompt):
+                chunk_count += 1
+                chunk_len = len(chunk)
+                answer_length += chunk_len
+                
+                logger.debug(f"Chunk {chunk_count}: {chunk_len} chars, total: {answer_length}")
+                
+                yield {
+                    'type': 'chunk',
+                    'chunk': chunk,
+                }
+            
+            logger.info(f"Finished streaming answer - {chunk_count} chunks, {answer_length} total chars")
+        except Exception as e:
+            logger.error(f"Error streaming answer: {str(e)}", exc_info=True)
+            yield {
+                'type': 'error',
+                'error': str(e),
+            }

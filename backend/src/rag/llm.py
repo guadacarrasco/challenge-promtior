@@ -12,7 +12,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 DEFAULT_OLLAMA_BASE_URL = "http://ollama:11434"
-DEFAULT_MODEL = "llama2"
+DEFAULT_MODEL = "llama3.2:1b"
 
 
 class OllamaLLM:
@@ -36,11 +36,14 @@ class OllamaLLM:
         
         logger.info(f"Initializing Ollama LLM at {base_url} with model {model}")
         
+        # Only use parameters supported by llama2
+        # Removed: mirostat, mirostat_tau, mirostat_eta, tfs_z (cause warnings)
         self.llm = Ollama(
             base_url=base_url,
             model=model,
             temperature=temperature,
             top_p=0.9,
+            top_k=40,
         )
         
         self.model_name = model
@@ -66,10 +69,20 @@ class OllamaLLM:
             raise
     
     def stream(self, prompt: str):
-        """Stream responses from the LLM (if supported)"""
+        """
+        Stream responses from the LLM token by token.
+        
+        Args:
+            prompt: Input prompt
+            
+        Yields:
+            Text chunks from the LLM
+        """
         try:
+            logger.debug(f"Streaming from Ollama with prompt: {prompt[:100]}...")
             for chunk in self.llm.stream(prompt):
-                yield chunk
+                if chunk:
+                    yield chunk
         except Exception as e:
             logger.error(f"Error streaming from Ollama: {str(e)}")
             raise

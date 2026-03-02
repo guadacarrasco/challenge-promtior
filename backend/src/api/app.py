@@ -7,7 +7,13 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from langchain_core.runnables import Runnable, RunnablePassthrough
+from langserve import add_routes
+import json
+import asyncio
+import time
 
 # Import RAG components
 from src.vector_store.store import VectorStore
@@ -60,6 +66,9 @@ async def lifespan(app: FastAPI):
         # Initialize RAG chain
         rag_chain = RAGChain(vector_store=vector_store, llm=llm, top_k=3)
         
+        # Setup LangServe routes
+        setup_langserve_routes()
+        
         logger.info("Application startup complete")
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}")
@@ -76,7 +85,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Promtior RAG Chatbot API",
-    description="RAG API for asking questions about Promtior",
+    description="RAG API for asking questions about Promtior (LangServe)",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -122,49 +131,112 @@ async def health_check():
     }
 
 
-# Chat endpoint
-@app.post("/api/chat")
-async def chat(request: ChatRequest) -> ChatResponse:
+# Streaming chat endpoint with SSE
+@app.post("/api/chat/stream")
+async def stream_chat(request: ChatRequest):
     """
-    Chat endpoint for asking questions about Promtior.
-    
-    Args:
-        request: ChatRequest with user message
-        
-    Returns:
-        ChatResponse with answer and sources
+    Stream chat responses using Server-Sent Events.
+    Returns chunks of the answer as they are generated.
     """
     global rag_chain
     
     if rag_chain is None:
-        raise HTTPException(status_code=503, detail="RAG chain not initialized")
+        raise HTTPException(status_code=503, detail="RAG chain not ready")
     
-    if not request.message or not request.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    async def generate():
+        """Async generator for streaming responses with proper flushing"""
+        try:
+            logger.info(f"Starting streaming response for query: {request.message}")
+            start_time = time.time()
+            chunk_count = 0
+            
+            # Run the blocking generator in a thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            generator = rag_chain.stream(request.message)
+            
+            for item in generator:
+                chunk_count += 1
+                # Log for debugging
+                if chunk_count == 1:
+                    logger.info(f"First chunk received after {time.time() - start_time:.2f}s")
+                
+                # Convert to JSON and send as SSE format with explicit newlines
+                sse_data = f"data: {json.dumps(item)}\n\n"
+                logger.debug(f"Sending SSE chunk {chunk_count}: {item.get('type', 'unknown')}")
+                yield sse_data
+                
+                # Allow other tasks to run
+                await asyncio.sleep(0)
+            
+            elapsed = time.time() - start_time
+            logger.info(f"Streaming complete: {chunk_count} chunks sent in {elapsed:.2f}s")
+            
+        except Exception as e:
+            logger.error(f"Error during streaming: {str(e)}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# Fallback non-streaming endpoint (for backward compatibility)
+@app.post("/api/chat")
+async def chat(request: ChatRequest):
+    """
+    Non-streaming chat endpoint (fallback if streaming has issues).
+    Returns the complete answer at once.
+    """
+    global rag_chain
+    
+    if rag_chain is None:
+        raise HTTPException(status_code=503, detail="RAG chain not ready")
     
     try:
-        logger.info(f"Processing chat message: {request.message[:100]}")
-        
-        # Invoke RAG chain
+        logger.info(f"Chat invoked with query: {request.message}")
         result = rag_chain.invoke(request.message)
         
-        # Format response
-        sources = [
-            SourceInfo(content=src['content'], metadata=src['metadata'])
-            for src in result['sources']
-        ]
-        
-        response = ChatResponse(
-            response=result['answer'],
-            sources=sources,
-        )
-        
-        logger.info(f"Chat response generated (length: {len(result['answer'])})")
-        return response
-    
+        return {
+            "response": result.get('answer', ''),
+            "sources": result.get('sources', [])
+        }
     except Exception as e:
-        logger.error(f"Error processing chat message: {str(e)}")
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+# Add LangServe routes for RAG chain
+def setup_langserve_routes():
+    """Setup LangServe routes after app is created"""
+    global rag_chain
+    
+    if rag_chain is None:
+        logger.warning("RAG chain not initialized, LangServe routes not added")
+        return
+    
+    from langchain_core.runnables import Runnable
+    from pydantic import BaseModel
+
+    class ChatInput(BaseModel):
+        query: str
+
+    class ChatOutput(BaseModel):
+        answer: str
+        sources: list = []
+
+    class RAGRunnable(Runnable):
+        def invoke(self, input: ChatInput, config=None):
+            # Handle both ChatInput object and dict
+            if isinstance(input, dict):
+                query = input.get('query')
+            else:
+                query = input.query
+            
+            result = rag_chain.invoke(query)
+            answer = result.get('answer') if isinstance(result, dict) else str(result)
+            sources = result.get('sources', []) if isinstance(result, dict) else []
+            return ChatOutput(answer=answer, sources=sources)
+
+    add_routes(app, RAGRunnable(), path="/chain")
+    logger.info("LangServe routes added at /chain")
 
 
 # Initialize vector store endpoint (for development)
