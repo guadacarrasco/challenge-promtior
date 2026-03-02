@@ -12,6 +12,9 @@ RUN npm install
 # Copiamos todo el código del frontend
 COPY . .
 
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Compilamos la aplicación de Next.js para producción
 RUN npm run build
 
