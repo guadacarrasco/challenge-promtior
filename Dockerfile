@@ -24,7 +24,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Copy backend
 COPY backend/pyproject.toml .
-RUN pip install --upgrade pip && pip install -e .
+
+# 1. Actualizar pip
+RUN pip install --upgrade pip
+
+# 2. Instalar la versión CPU de PyTorch (reduce el peso de 4GB a ~200MB)
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# 3. Instalar las dependencias de la aplicación
+RUN pip install -e .
 
 # Copy application code
 COPY backend/src ./src
