@@ -31,7 +31,7 @@ COPY backend/src ./src
 
 # Copy frontend build to be served by FastAPI
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
-COPY --from=frontend-builder /app/frontend/public ./frontend/public
+
 
 # Expose ports
 EXPOSE 8000 3000
