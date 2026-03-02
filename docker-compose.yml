@@ -20,10 +20,9 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OLLAMA_MODEL=llama3.2:1b
       - VECTOR_STORE_PATH=/app/chroma_data
-      - DEBUG=True
+      - DEBUG=False
       - LOG_LEVEL=INFO
     volumes:
-      - ./backend:/app/backend
       - backend_data:/app/chroma_data
     depends_on:
       - ollama
@@ -31,7 +30,7 @@ services:
       bash -c "
         echo 'Waiting for Ollama to be ready...' &&
         sleep 10 &&
-        python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+        python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000
       "
 
   frontend:
@@ -41,13 +40,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-    volumes:
-      - ./frontend:/app/frontend
-      - /app/frontend/.next
+      - NEXT_PUBLIC_API_URL=/api
     depends_on:
       - backend
-    command: npm run dev
+    command: npm start
 
 volumes:
   ollama_data:
