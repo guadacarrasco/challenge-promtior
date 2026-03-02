@@ -23,7 +23,7 @@ export async function sendMessage(message: string): Promise<any> {
   });
 
   if (!response.ok) {
-    throw new Error('Error al enviar el mensaje');
+    throw new Error('Error sending message');
   }
 
   const data = await response.json();
@@ -42,13 +42,13 @@ async function fallbackToNonStreaming(
   onError: (error: string) => void
 ): Promise<void> {
   try {
-    console.log('Using fallback non-streaming endpoint');
-    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    console.log('Using fallback non-streaming invoke endpoint');
+    const response = await fetch(`${API_BASE_URL}/chain/invoke`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ input: { query: message } }),
     });
 
     if (!response.ok) {
@@ -56,15 +56,19 @@ async function fallbackToNonStreaming(
     }
 
     const data = await response.json();
+    console.log('Fallback response:', data);
+
+    // LangServe returns { output: { answer, sources } }
+    const output = data.output || {};
 
     // Emit sources if available
-    if (data.sources && data.sources.length > 0) {
-      onSources(data.sources);
+    if (output.sources && output.sources.length > 0) {
+      onSources(output.sources);
     }
 
     // Emit complete response as one chunk
-    if (data.response) {
-      onChunk(data.response);
+    if (output.answer) {
+      onChunk(output.answer);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -82,13 +86,13 @@ export async function streamMessage(
   const timeout = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
 
   try {
-    console.log('Starting streaming request');
-    const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+    console.log('Starting LangServe streaming request to /chain/stream');
+    const response = await fetch(`${API_BASE_URL}/chain/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ input: { query: message } }),
       signal: controller.signal,
     });
 
@@ -100,8 +104,8 @@ export async function streamMessage(
 
     const reader = response.body?.getReader();
     if (!reader) {
-      // Fallback to non-streaming endpoint if body is not readable
-      console.warn('Response body not readable, using fallback');
+      // Fallback to non-streaming invoke endpoint
+      console.warn('Response body not readable, using non-streaming invoke');
       return fallbackToNonStreaming(message, onChunk, onSources, onError);
     }
 
@@ -129,12 +133,22 @@ export async function streamMessage(
           const jsonStr = line.slice(6);
           try {
             const data = JSON.parse(jsonStr);
-            if (data.type === 'chunk') {
-              onChunk(data.chunk);
-            } else if (data.type === 'sources') {
-              onSources(data.sources);
-            } else if (data.type === 'error') {
-              onError(data.error);
+            console.log('Received from LangServe:', data);
+            
+            // LangServe streams objects with { output: { answer: string, sources: any[] } }
+            const output = data.output || data;
+            
+            if (output.answer) {
+              // Can be partial or full answer from the stream
+              onChunk(output.answer);
+            }
+            
+            if (output.sources && output.sources.length > 0) {
+              onSources(output.sources);
+            }
+            
+            if (output.error) {
+              onError(output.error);
             }
           } catch (e) {
             console.error('Failed to parse streaming data:', e);
@@ -144,7 +158,7 @@ export async function streamMessage(
     }
 
     if (!hasReceivedData) {
-      throw new Error('No data received');
+      throw new Error('No data received from stream');
     }
   } catch (error) {
     clearTimeout(timeout);
@@ -153,7 +167,7 @@ export async function streamMessage(
 
     // Fallback to non-streaming endpoint
     if (!errorMessage.includes('abort')) {
-      console.log('Attempting fallback...');
+      console.log('Attempting fallback to non-streaming...');
       try {
         await fallbackToNonStreaming(message, onChunk, onSources, onError);
       } catch (fallbackError) {

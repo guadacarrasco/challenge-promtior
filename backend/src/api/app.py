@@ -1,19 +1,18 @@
-"""FastAPI application with LangServe endpoints"""
+"""FastAPI application with LangServe endpoints - Pure LangServe implementation"""
 
 import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable
 from langserve import add_routes
-import json
-import asyncio
-import time
 
 # Import RAG components
 from src.vector_store.store import VectorStore
@@ -54,7 +53,7 @@ async def lifespan(app: FastAPI):
         
         # Initialize LLM
         ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama2")
+        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
         logger.info(f"Initializing Ollama LLM: {ollama_model} at {ollama_base_url}")
         
         llm = OllamaLLM(
@@ -66,9 +65,6 @@ async def lifespan(app: FastAPI):
         # Initialize RAG chain
         rag_chain = RAGChain(vector_store=vector_store, llm=llm, top_k=3)
         
-        # Setup LangServe routes
-        setup_langserve_routes()
-        
         logger.info("Application startup complete")
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}")
@@ -78,14 +74,13 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down application...")
-    # Vector store auto-persists with PersistentClient
     logger.info("Application shutdown complete")
 
 
 # Create FastAPI app
 app = FastAPI(
     title="Promtior RAG Chatbot API",
-    description="RAG API for asking questions about Promtior (LangServe)",
+    description="RAG API for asking questions about Promtior using LangChain with LangServe",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -93,26 +88,99 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (for development)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Request/Response models
-class ChatRequest(BaseModel):
-    message: str
+# LangServe Input/Output models following LangChain conventions
+class QueryInput(BaseModel):
+    """Input model for RAG queries"""
+    query: str
 
 
-class SourceInfo(BaseModel):
-    content: str
-    metadata: dict = {}
+class QueryOutput(BaseModel):
+    """Output model for RAG responses"""
+    answer: str
+    sources: list = []
 
 
-class ChatResponse(BaseModel):
-    response: str
-    sources: list[SourceInfo] = []
+class RAGChainRunnable(Runnable):
+    """
+    LangServe-compatible Runnable wrapper for the RAG chain.
+    This follows LangChain's Runnable protocol.
+    """
+    
+    def invoke(self, input_data, config=None):
+        """Invoke the RAG chain with a query"""
+        global rag_chain
+        
+        if rag_chain is None:
+            raise RuntimeError("RAG chain not initialized")
+        
+        # Handle both dict and QueryInput
+        if isinstance(input_data, dict):
+            query = input_data.get("query")
+        else:
+            query = input_data.query
+        
+        logger.info(f"RAG Chain invoked with query: {query}")
+        
+        # Invoke the RAG chain
+        result = rag_chain.invoke(query)
+        
+        return QueryOutput(
+            answer=result.get("answer", ""),
+            sources=result.get("sources", [])
+        )
+    
+    def stream(self, input_data, config=None):
+        """Stream the RAG chain with progressive token output"""
+        global rag_chain
+        
+        if rag_chain is None:
+            raise RuntimeError("RAG chain not initialized")
+        
+        # Handle both dict and QueryInput
+        if isinstance(input_data, dict):
+            query = input_data.get("query")
+        else:
+            query = input_data.query
+        
+        logger.info(f"RAG Chain streaming with query: {query}")
+        
+        # Stream the RAG chain
+        full_answer = ""
+        sources = None
+        
+        for item in rag_chain.stream(query):
+            if item.get("type") == "sources":
+                sources = item.get("sources", [])
+                # Yield sources first
+                yield QueryOutput(answer="", sources=sources)
+            elif item.get("type") == "chunk":
+                chunk = item.get("chunk", "")
+                full_answer += chunk
+                # Yield progressive updates with accumulated answer
+                yield QueryOutput(answer=full_answer, sources=sources or [])
+            elif item.get("type") == "error":
+                error_msg = item.get("error", "Unknown error")
+                logger.error(f"Error in stream: {error_msg}")
+                raise RuntimeError(error_msg)
+
+
+# Add LangServe routes
+# The RAG chain is exposed at /chain with invoke and stream endpoints
+add_routes(
+    app,
+    RAGChainRunnable(),
+    path="/chain",
+    enable_feedback_endpoint=False,  # Disable feedback for now
+)
+
+logger.info("LangServe routes added at /chain (invoke, stream)")
 
 
 # Health check endpoint
@@ -131,112 +199,33 @@ async def health_check():
     }
 
 
-# Streaming chat endpoint with SSE
-@app.post("/api/chat/stream")
-async def stream_chat(request: ChatRequest):
-    """
-    Stream chat responses using Server-Sent Events.
-    Returns chunks of the answer as they are generated.
-    """
-    global rag_chain
+# Serve static files from Next.js build
+frontend_static = Path(__file__).parent.parent.parent / "frontend" / ".next" / "static"
+if frontend_static.exists():
+    app.mount("/_next/static", StaticFiles(directory=frontend_static), name="static")
+    logger.info(f"Mounted static files from {frontend_static}")
+
+frontend_public = Path(__file__).parent.parent.parent / "frontend" / "public"
+if frontend_public.exists():
+    app.mount("/public", StaticFiles(directory=frontend_public), name="public")
+    logger.info(f"Mounted public files from {frontend_public}")
+
+
+# Catch-all route to serve Next.js frontend for client-side routing
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve Next.js frontend for all non-API routes"""
+    # Don't intercept API routes or LangServe routes
+    if any(full_path.startswith(prefix) for prefix in ["api/", "chain", "_next", "public"]):
+        return None
     
-    if rag_chain is None:
-        raise HTTPException(status_code=503, detail="RAG chain not ready")
+    # Return index.html for client-side routing
+    index_file = Path(__file__).parent.parent.parent / "frontend" / ".next" / "standalone" / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
     
-    async def generate():
-        """Async generator for streaming responses with proper flushing"""
-        try:
-            logger.info(f"Starting streaming response for query: {request.message}")
-            start_time = time.time()
-            chunk_count = 0
-            
-            # Run the blocking generator in a thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            generator = rag_chain.stream(request.message)
-            
-            for item in generator:
-                chunk_count += 1
-                # Log for debugging
-                if chunk_count == 1:
-                    logger.info(f"First chunk received after {time.time() - start_time:.2f}s")
-                
-                # Convert to JSON and send as SSE format with explicit newlines
-                sse_data = f"data: {json.dumps(item)}\n\n"
-                logger.debug(f"Sending SSE chunk {chunk_count}: {item.get('type', 'unknown')}")
-                yield sse_data
-                
-                # Allow other tasks to run
-                await asyncio.sleep(0)
-            
-            elapsed = time.time() - start_time
-            logger.info(f"Streaming complete: {chunk_count} chunks sent in {elapsed:.2f}s")
-            
-        except Exception as e:
-            logger.error(f"Error during streaming: {str(e)}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-    
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-# Fallback non-streaming endpoint (for backward compatibility)
-@app.post("/api/chat")
-async def chat(request: ChatRequest):
-    """
-    Non-streaming chat endpoint (fallback if streaming has issues).
-    Returns the complete answer at once.
-    """
-    global rag_chain
-    
-    if rag_chain is None:
-        raise HTTPException(status_code=503, detail="RAG chain not ready")
-    
-    try:
-        logger.info(f"Chat invoked with query: {request.message}")
-        result = rag_chain.invoke(request.message)
-        
-        return {
-            "response": result.get('answer', ''),
-            "sources": result.get('sources', [])
-        }
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
-
-# Add LangServe routes for RAG chain
-def setup_langserve_routes():
-    """Setup LangServe routes after app is created"""
-    global rag_chain
-    
-    if rag_chain is None:
-        logger.warning("RAG chain not initialized, LangServe routes not added")
-        return
-    
-    from langchain_core.runnables import Runnable
-    from pydantic import BaseModel
-
-    class ChatInput(BaseModel):
-        query: str
-
-    class ChatOutput(BaseModel):
-        answer: str
-        sources: list = []
-
-    class RAGRunnable(Runnable):
-        def invoke(self, input: ChatInput, config=None):
-            # Handle both ChatInput object and dict
-            if isinstance(input, dict):
-                query = input.get('query')
-            else:
-                query = input.query
-            
-            result = rag_chain.invoke(query)
-            answer = result.get('answer') if isinstance(result, dict) else str(result)
-            sources = result.get('sources', []) if isinstance(result, dict) else []
-            return ChatOutput(answer=answer, sources=sources)
-
-    add_routes(app, RAGRunnable(), path="/chain")
-    logger.info("LangServe routes added at /chain")
+    # Fallback if file not found
+    return {"error": "Frontend not found"}
 
 
 # Initialize vector store endpoint (for development)
