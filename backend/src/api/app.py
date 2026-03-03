@@ -49,13 +49,13 @@ async def lifespan(app: FastAPI):
             logger.warning("Vector store is empty! Run init_vector_store first.")
         
         # Initialize LLM
-        ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
-        logger.info(f"Initializing Ollama LLM: {ollama_model} at {ollama_base_url}")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        logger.info(f"Initializing OpenAI LLM: {openai_model}")
         
         llm = OllamaLLM(
-            base_url=ollama_base_url,
-            model=ollama_model,
+            api_key=openai_api_key,
+            model=openai_model,
             temperature=0.7,
         )
         

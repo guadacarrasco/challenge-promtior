@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "promtior-rag"
 version = "0.1.0"
-description = "RAG chatbot for Promtior using LangChain and Ollama"
+description = "RAG chatbot for Promtior using LangChain and OpenAI"
 requires-python = ">=3.10"
 authors = [
     {name = "Promtior Team", email = "team@promtior.ai"},
@@ -16,10 +16,10 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-core>=0.1.0",
     "langchain-community>=0.0.10",
+    "langchain-openai>=0.1.0",
     "langserve>=0.0.28",
     "sse_starlette>=2.0.0",
     "chromadb>=0.4.0",
-    "ollama>=0.1.0",
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.0",
     "pypdf>=3.17.0",

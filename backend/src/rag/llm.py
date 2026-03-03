@@ -1,53 +1,53 @@
-"""LLM initialization with Ollama and LLaMA2"""
+"""LLM initialization with OpenAI"""
 
 import logging
 import os
 from typing import Optional
 
 try:
-    from langchain_community.llms import Ollama
+    from langchain_openai import ChatOpenAI
 except ImportError:
-    raise ImportError("Please install langchain and langchain-community")
+    raise ImportError("Please install langchain-openai: pip install langchain-openai")
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OLLAMA_BASE_URL = "http://ollama:11434"
-DEFAULT_MODEL = "llama3.2:1b"
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 class OllamaLLM:
-    """Wrapper for Ollama LLM"""
+    """Wrapper for OpenAI LLM (maintains same interface as Ollama)"""
     
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         model: str = DEFAULT_MODEL,
         temperature: float = 0.7,
     ):
         """
-        Initialize Ollama LLM.
+        Initialize OpenAI LLM.
         
         Args:
-            base_url: Base URL for Ollama server
-            model: Model name (default: llama2)
+            api_key: OpenAI API key (or set OPENAI_API_KEY env var)
+            model: Model name (default: gpt-4o-mini - fast and cost-effective)
             temperature: Temperature for generation (0-1)
         """
-        base_url = base_url or os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
+        api_key = api_key or os.getenv("OPENAI_API_KEY")
         
-        logger.info(f"Initializing Ollama LLM at {base_url} with model {model}")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY not provided. Set it via environment variable or constructor."
+            )
         
-        # Only use parameters supported by llama2
-        # Removed: mirostat, mirostat_tau, mirostat_eta, tfs_z (cause warnings)
-        self.llm = Ollama(
-            base_url=base_url,
+        logger.info(f"Initializing OpenAI LLM with model {model}")
+        
+        self.llm = ChatOpenAI(
+            api_key=api_key,
             model=model,
             temperature=temperature,
-            top_p=0.9,
-            top_k=40,
         )
         
         self.model_name = model
-        logger.info(f"Ollama LLM initialized successfully")
+        logger.info(f"OpenAI LLM initialized successfully")
     
     def invoke(self, prompt: str) -> str:
         """
@@ -60,12 +60,13 @@ class OllamaLLM:
             Generated response
         """
         try:
-            logger.debug(f"Invoking Ollama with prompt: {prompt[:100]}...")
+            logger.debug(f"Invoking OpenAI with prompt: {prompt[:100]}...")
             response = self.llm.invoke(prompt)
-            logger.debug(f"Got response: {response[:100]}...")
-            return response
+            text = response.content if hasattr(response, 'content') else str(response)
+            logger.debug(f"Got response: {text[:100]}...")
+            return text
         except Exception as e:
-            logger.error(f"Error invoking Ollama: {str(e)}")
+            logger.error(f"Error invoking OpenAI: {str(e)}")
             raise
     
     def stream(self, prompt: str):
@@ -79,10 +80,11 @@ class OllamaLLM:
             Text chunks from the LLM
         """
         try:
-            logger.debug(f"Streaming from Ollama with prompt: {prompt[:100]}...")
+            logger.debug(f"Streaming from OpenAI with prompt: {prompt[:100]}...")
             for chunk in self.llm.stream(prompt):
-                if chunk:
-                    yield chunk
+                text = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                if text:
+                    yield text
         except Exception as e:
-            logger.error(f"Error streaming from Ollama: {str(e)}")
+            logger.error(f"Error streaming from OpenAI: {str(e)}")
             raise
