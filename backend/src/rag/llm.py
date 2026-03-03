@@ -6,6 +6,7 @@ from typing import Optional
 
 try:
     from langchain_openai import ChatOpenAI
+    from langchain_core.messages import HumanMessage
 except ImportError:
     raise ImportError("Please install langchain-openai: pip install langchain-openai")
 
@@ -61,7 +62,7 @@ class OllamaLLM:
         """
         try:
             logger.debug(f"Invoking OpenAI with prompt: {prompt[:100]}...")
-            response = self.llm.invoke(prompt)
+            response = self.llm.invoke([HumanMessage(content=prompt)])
             text = response.content if hasattr(response, 'content') else str(response)
             logger.debug(f"Got response: {text[:100]}...")
             return text
@@ -81,7 +82,7 @@ class OllamaLLM:
         """
         try:
             logger.debug(f"Streaming from OpenAI with prompt: {prompt[:100]}...")
-            for chunk in self.llm.stream(prompt):
+            for chunk in self.llm.stream([HumanMessage(content=prompt)]):
                 text = chunk.content if hasattr(chunk, 'content') else str(chunk)
                 if text:
                     yield text
