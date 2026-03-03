@@ -1,14 +1,5 @@
-# Multi-stage Dockerfile for Promtior RAG
+# Dockerfile for Promtior RAG Backend
 
-# Stage 1: Frontend builder
-FROM node:18-alpine AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ .
-RUN npm run build
-
-# Stage 2: Backend & runner
 FROM python:3.10 AS backend
 WORKDIR /app
 
@@ -38,16 +29,12 @@ RUN pip install -e .
 COPY backend/src ./src
 COPY backend/data ./data
 
-# Copy frontend build to be served by FastAPI
-COPY --from=frontend-builder /app/frontend/.next ./frontend/.next
-
-
-# Expose ports
-EXPOSE 8000 3000
+# Expose port
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Start backend API (frontend will be served from here or separate)
+# Start backend API
 CMD ["python", "-m", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
