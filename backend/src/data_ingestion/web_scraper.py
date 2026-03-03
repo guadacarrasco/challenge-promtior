@@ -7,7 +7,7 @@ from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-TARGET_URL = "https://promtior.ai"
+TARGET_URL = "https://www.promtior.ai"
 
 
 def scrape_website(url: str = TARGET_URL) -> List[Document]:

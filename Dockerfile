@@ -36,6 +36,7 @@ RUN pip install -e .
 
 # Copy application code
 COPY backend/src ./src
+COPY backend/data ./data
 
 # Copy frontend build to be served by FastAPI
 COPY --from=frontend-builder /app/frontend/.next ./frontend/.next

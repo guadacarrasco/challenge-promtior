@@ -46,7 +46,13 @@ async def lifespan(app: FastAPI):
         logger.info(f"Vector store stats: {stats}")
         
         if stats['document_count'] == 0:
-            logger.warning("Vector store is empty! Run init_vector_store first.")
+            logger.info("Vector store is empty — running automatic ingestion...")
+            from src.vector_store.init_vector_store import init_vector_store
+            init_vector_store(persist_dir=persist_dir)
+            # Reload store after population
+            vector_store = VectorStore(persist_dir=persist_dir)
+            stats = vector_store.get_stats()
+            logger.info(f"Vector store populated: {stats}")
         
         # Initialize LLM
         openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -188,45 +194,6 @@ async def health_check():
     }
 
 
-# Initialize vector store endpoint (for development)
-@app.post("/api/init")
-async def init_vector_store_endpoint():
-    """
-    Re-initialize vector store with fresh data (development only).
-    This is useful for testing and development.
-    """
-    global rag_chain, vector_store
-    
-    if os.getenv("DEBUG", "False").lower() != "true":
-        raise HTTPException(status_code=403, detail="Not allowed in production")
-    
-    try:
-        logger.info("Re-initializing vector store...")
-        
-        from src.data_ingestion.pipeline import DataIngestionPipeline
-        
-        # Re-initialize pipeline
-        pipeline = DataIngestionPipeline()
-        pipeline.ingest_website("https://promtior.ai")
-        chunked_docs = pipeline.chunk_all_documents()
-        
-        # Clear and re-populate vector store
-        vector_store.clear()
-        added = vector_store.add_documents(chunked_docs)
-        # Vector store auto-persists with PersistentClient
-        
-        stats = vector_store.get_stats()
-        logger.info(f"Vector store re-initialized: {added} documents added")
-        
-        return {
-            "status": "success",
-            "documents_added": added,
-            "stats": stats,
-        }
-    
-    except Exception as e:
-        logger.error(f"Error re-initializing vector store: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 if __name__ == "__main__":

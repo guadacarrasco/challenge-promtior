@@ -25,7 +25,11 @@ def init_vector_store(
         persist_dir: Directory to persist the vector store
     """
     if urls is None:
-        urls = ["https://promtior.ai"]
+        urls = [
+            "https://www.promtior.ai",
+            "https://www.promtior.ai/service",
+            "https://www.promtior.ai/use-cases",
+        ]
     
     logger.info("Starting vector store initialization")
     
@@ -37,7 +41,9 @@ def init_vector_store(
     for url in urls:
         pipeline.ingest_website(url)
     
-    # Ingest PDFs if directory provided
+    # Ingest PDFs from the data directory
+    if pdf_dir is None:
+        pdf_dir = str(Path(__file__).resolve().parents[3] / "data")
     if pdf_dir and Path(pdf_dir).exists():
         logger.info(f"Ingesting PDFs from {pdf_dir}")
         pipeline.ingest_pdf_directory(pdf_dir)
