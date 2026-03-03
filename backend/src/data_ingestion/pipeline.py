@@ -4,7 +4,7 @@ import logging
 from typing import List
 from langchain_core.documents import Document
 
-from .web_scraper import scrape_website, scrape_multiple_urls
+from .web_scraper import scrape_website
 from .pdf_loader import load_pdf, load_pdfs_from_directory
 from .chunker import chunk_documents
 
@@ -25,14 +25,6 @@ class DataIngestionPipeline:
         docs = scrape_website(url)
         self.documents.extend(docs)
         logger.info(f"Added {len(docs)} documents from website")
-        return len(docs)
-    
-    def ingest_websites(self, urls: List[str]) -> int:
-        """Ingest content from multiple websites"""
-        logger.info(f"Ingesting {len(urls)} websites")
-        docs = scrape_multiple_urls(urls)
-        self.documents.extend(docs)
-        logger.info(f"Added {len(docs)} documents from websites")
         return len(docs)
     
     def ingest_pdf(self, file_path: str) -> int:
@@ -62,7 +54,3 @@ class DataIngestionPipeline:
         logger.info(f"Created {len(chunked)} chunks")
         return chunked
     
-    def reset(self):
-        """Clear all documents"""
-        self.documents = []
-        logger.info("Pipeline reset")

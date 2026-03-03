@@ -13,28 +13,6 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
-export async function sendMessage(message: string): Promise<any> {
-  const response = await fetch(`${API_BASE_URL}/chain/invoke`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ input: { query: message } }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Error sending message');
-  }
-
-  const data = await response.json();
-  // LangServe returns { output: { answer, sources } }
-  const output = data.output || {};
-  return {
-    response: output.answer || output.response || JSON.stringify(output),
-    sources: output.sources || [],
-  };
-}
-
 async function fallbackToNonStreaming(
   message: string,
   onChunk: (chunk: string) => void,

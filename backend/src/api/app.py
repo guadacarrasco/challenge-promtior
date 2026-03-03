@@ -92,12 +92,6 @@ app.add_middleware(
 )
 
 
-# LangServe Input/Output models following LangChain conventions
-class QueryInput(BaseModel):
-    """Input model for RAG queries"""
-    query: str
-
-
 class QueryOutput(BaseModel):
     """Output model for RAG responses"""
     answer: str
@@ -117,7 +111,6 @@ class RAGChainRunnable(Runnable):
         if rag_chain is None:
             raise RuntimeError("RAG chain not initialized")
         
-        # Handle both dict and QueryInput
         if isinstance(input_data, dict):
             query = input_data.get("query")
         else:
@@ -140,7 +133,6 @@ class RAGChainRunnable(Runnable):
         if rag_chain is None:
             raise RuntimeError("RAG chain not initialized")
         
-        # Handle both dict and QueryInput
         if isinstance(input_data, dict):
             query = input_data.get("query")
         else:

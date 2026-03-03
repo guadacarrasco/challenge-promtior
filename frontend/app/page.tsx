@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { ChatBox } from '@/components/ChatBox';
 import { InputBar } from '@/components/InputBar';
-import { sendMessage, checkHealth, streamMessage } from '@/lib/api';
+import { checkHealth, streamMessage } from '@/lib/api';
 
 interface Message {
   id: string;

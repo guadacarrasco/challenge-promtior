@@ -35,11 +35,3 @@ def scrape_website(url: str = TARGET_URL) -> List[Document]:
         logger.error(f"Error scraping {url}: {str(e)}")
         return []
 
-
-def scrape_multiple_urls(urls: List[str]) -> List[Document]:
-    """Scrape multiple URLs and combine results"""
-    all_docs = []
-    for url in urls:
-        docs = scrape_website(url)
-        all_docs.extend(docs)
-    return all_docs

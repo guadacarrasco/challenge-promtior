@@ -9,11 +9,6 @@ from src.vector_store.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a helpful assistant answering questions about Promtior.
-Use the provided context to answer the user's question accurately.
-If the context doesn't contain the answer, say so honestly.
-Keep your answers clear and concise."""
-
 QUESTION_TEMPLATE = """Context:
 {context}
 
