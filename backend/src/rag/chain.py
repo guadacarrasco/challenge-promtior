@@ -8,10 +8,22 @@ from src.vector_store.store import VectorStore
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_PROMPT = """You are a helpful customer-support assistant for Promtior Company.
+You must follow these rules strictly:
+
+1. ONLY answer questions using the provided context below. Do NOT use any knowledge from your training data.
+2. If the provided context does not contain enough information to answer the question, respond with:
+   "I can only answer questions related to Promtior Company and its services. The information you're asking about is not within my scope."
+3. Do NOT answer general-knowledge questions, trivia, math problems, coding questions, or anything unrelated to Promtior.
+4. If the user greets you, respond politely and let them know you are here to help with questions about Promtior Company.
+5. Always base your answers strictly on the provided context."""
+
 QUESTION_TEMPLATE = """Context:
 {context}
 
 Question: {question}
+
+Using ONLY the context provided above, answer the question. If the context does not contain relevant information to answer the question, say that you can only help with questions about Promtior Company and its services.
 
 Answer: """
 
@@ -50,7 +62,7 @@ class RAGChain:
         
         # Generate answer
         try:
-            answer = self.llm.invoke(prompt)
+            answer = self.llm.invoke(prompt, system_prompt=SYSTEM_PROMPT)
             logger.info(f"Generated answer (length: {len(answer)})")
         except Exception as e:
             logger.error(f"Error generating answer: {str(e)}")
@@ -111,7 +123,7 @@ class RAGChain:
             chunk_count = 0
             
             
-            for chunk in self.llm.stream(prompt):
+            for chunk in self.llm.stream(prompt, system_prompt=SYSTEM_PROMPT):
                 chunk_count += 1
                 chunk_len = len(chunk)
                 answer_length += chunk_len

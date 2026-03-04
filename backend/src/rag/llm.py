@@ -6,7 +6,7 @@ from typing import Optional
 
 try:
     from langchain_openai import ChatOpenAI
-    from langchain_core.messages import HumanMessage
+    from langchain_core.messages import HumanMessage, SystemMessage
 except ImportError:
     raise ImportError("Please install langchain-openai: pip install langchain-openai")
 
@@ -43,11 +43,19 @@ class OpenAILLM:
         self.model_name = model
       
     
-    def invoke(self, prompt: str) -> str:
+    def _build_messages(self, prompt: str, system_prompt: Optional[str] = None) -> list:
+        """Build the message list, optionally prepending a system message."""
+        messages = []
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+        messages.append(HumanMessage(content=prompt))
+        return messages
+
+    def invoke(self, prompt: str, system_prompt: Optional[str] = None) -> str:
        
         try:
-
-            response = self.llm.invoke([HumanMessage(content=prompt)])
+            messages = self._build_messages(prompt, system_prompt)
+            response = self.llm.invoke(messages)
             text = response.content if hasattr(response, 'content') else str(response)
 
             return text
@@ -55,11 +63,11 @@ class OpenAILLM:
             logger.error(f"Error invoking OpenAI: {str(e)}")
             raise
     
-    def stream(self, prompt: str):
+    def stream(self, prompt: str, system_prompt: Optional[str] = None):
         
         try:
-
-            for chunk in self.llm.stream([HumanMessage(content=prompt)]):
+            messages = self._build_messages(prompt, system_prompt)
+            for chunk in self.llm.stream(messages):
                 text = chunk.content if hasattr(chunk, 'content') else str(chunk)
                 if text:
                     yield text
