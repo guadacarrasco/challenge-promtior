@@ -1,5 +1,3 @@
-"""PDF loading module for document ingestion"""
-
 import logging
 from typing import List, Optional
 from pathlib import Path
@@ -10,26 +8,16 @@ logger = logging.getLogger(__name__)
 
 
 def load_pdf(file_path: str) -> List[Document]:
-    """
-    Load a PDF file using LangChain's PyPDFLoader.
-
-    Args:
-        file_path: Path to the PDF file
-
-    Returns:
-        List of Document objects from the PDF
-    """
     try:
         path = Path(file_path)
         if not path.exists():
             logger.warning(f"PDF file not found: {file_path}")
             return []
         
-        logger.info(f"Loading PDF from {file_path}")
         loader = PyPDFLoader(file_path)
         docs = loader.load()
         
-        logger.info(f"Successfully loaded {len(docs)} pages from {file_path}")
+
         for i, doc in enumerate(docs):
             doc.metadata['source'] = str(path.name)
             doc.metadata['type'] = 'pdf'
@@ -42,7 +30,7 @@ def load_pdf(file_path: str) -> List[Document]:
 
 
 def load_pdfs_from_directory(directory: str) -> List[Document]:
-    """Load all PDF files from a directory"""
+    
     all_docs = []
     dir_path = Path(directory)
     

@@ -1,4 +1,4 @@
-"""FastAPI application with LangServe endpoints - Pure LangServe implementation"""
+
 
 import logging
 import os
@@ -14,7 +14,7 @@ from langserve import add_routes
 # Import RAG components
 from src.vector_store.store import VectorStore
 from src.rag.chain import RAGChain
-from src.rag.llm import OllamaLLM
+from src.rag.llm import OpenAILLM
 
 # Logging setup
 logging.basicConfig(
@@ -30,8 +30,7 @@ vector_store: Optional[VectorStore] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown"""
-    # Startup
+    
     logger.info("Starting up application...")
     
     try:
@@ -39,27 +38,27 @@ async def lifespan(app: FastAPI):
         
         # Initialize vector store
         persist_dir = os.getenv("VECTOR_STORE_PATH", "./chroma_data")
-        logger.info(f"Loading vector store from {persist_dir}")
+
         vector_store = VectorStore(persist_dir=persist_dir)
         
         stats = vector_store.get_stats()
-        logger.info(f"Vector store stats: {stats}")
+     
         
         if stats['document_count'] == 0:
-            logger.info("Vector store is empty — running automatic ingestion...")
+            logger.info("Vector store is empty — running automatic ingestion")
             from src.vector_store.init_vector_store import init_vector_store
             init_vector_store(persist_dir=persist_dir)
             # Reload store after population
             vector_store = VectorStore(persist_dir=persist_dir)
             stats = vector_store.get_stats()
-            logger.info(f"Vector store populated: {stats}")
+           
         
         # Initialize LLM
         openai_api_key = os.getenv("OPENAI_API_KEY")
         openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        logger.info(f"Initializing OpenAI LLM: {openai_model}")
+
         
-        llm = OllamaLLM(
+        llm = OpenAILLM(
             api_key=openai_api_key,
             model=openai_model,
             temperature=0.7,
@@ -83,7 +82,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Promtior RAG Chatbot API",
-    description="RAG API for asking questions about Promtior using LangChain with LangServe",
+    description="RAG API for asking questions about Promtior",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -99,19 +98,16 @@ app.add_middleware(
 
 
 class QueryOutput(BaseModel):
-    """Output model for RAG responses"""
+
     answer: str
     sources: list = []
 
 
 class RAGChainRunnable(Runnable):
-    """
-    LangServe-compatible Runnable wrapper for the RAG chain.
-    This follows LangChain's Runnable protocol.
-    """
+   
     
     def invoke(self, input_data, config=None):
-        """Invoke the RAG chain with a query"""
+      
         global rag_chain
         
         if rag_chain is None:
@@ -122,7 +118,7 @@ class RAGChainRunnable(Runnable):
         else:
             query = input_data.query
         
-        logger.info(f"RAG Chain invoked with query: {query}")
+    
         
         # Invoke the RAG chain
         result = rag_chain.invoke(query)
@@ -133,7 +129,7 @@ class RAGChainRunnable(Runnable):
         )
     
     def stream(self, input_data, config=None):
-        """Stream the RAG chain with progressive token output"""
+       
         global rag_chain
         
         if rag_chain is None:
@@ -144,7 +140,7 @@ class RAGChainRunnable(Runnable):
         else:
             query = input_data.query
         
-        logger.info(f"RAG Chain streaming with query: {query}")
+       
         
         # Stream the RAG chain
         full_answer = ""
@@ -166,8 +162,7 @@ class RAGChainRunnable(Runnable):
                 raise RuntimeError(error_msg)
 
 
-# Add LangServe routes
-# The RAG chain is exposed at /chain with invoke and stream endpoints
+
 add_routes(
     app,
     RAGChainRunnable(),
@@ -175,7 +170,7 @@ add_routes(
     enable_feedback_endpoint=False,  # Disable feedback for now
 )
 
-logger.info("LangServe routes added at /chain (invoke, stream)")
+
 
 
 # Health check endpoint

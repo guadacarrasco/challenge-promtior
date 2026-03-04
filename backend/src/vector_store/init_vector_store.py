@@ -1,5 +1,3 @@
-"""Vector store initialization script"""
-
 import logging
 import os
 from pathlib import Path
@@ -16,14 +14,7 @@ def init_vector_store(
     pdf_dir: str = None,
     persist_dir: str = "./chroma_data",
 ):
-    """
-    Initialize and populate the vector store with data.
     
-    Args:
-        urls: List of URLs to scrape
-        pdf_dir: Directory containing PDFs to ingest
-        persist_dir: Directory to persist the vector store
-    """
     if urls is None:
         urls = [
             "https://www.promtior.ai",
@@ -31,13 +22,12 @@ def init_vector_store(
             "https://www.promtior.ai/use-cases",
         ]
     
-    logger.info("Starting vector store initialization")
     
-    # Initialize pipeline
+    
     pipeline = DataIngestionPipeline(chunk_size=1000, chunk_overlap=200)
     
     # Ingest websites
-    logger.info(f"Ingesting {len(urls)} website(s)")
+    
     for url in urls:
         pipeline.ingest_website(url)
     
@@ -45,7 +35,7 @@ def init_vector_store(
     if pdf_dir is None:
         pdf_dir = str(Path(__file__).resolve().parents[3] / "data")
     if pdf_dir and Path(pdf_dir).exists():
-        logger.info(f"Ingesting PDFs from {pdf_dir}")
+
         pipeline.ingest_pdf_directory(pdf_dir)
     
     # Chunk documents
@@ -61,8 +51,7 @@ def init_vector_store(
     # Add documents
     added = vector_store.add_documents(chunked_docs)
     
-    # Persist
-    # Vector store auto-persists with PersistentClient
+
     
     # Print stats
     stats = vector_store.get_stats()
